@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Tareas</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Sistema de Agendamiento de Tareas</h1>
+    
+    <!-- Formulario para agregar tarea -->
+    <div class="task-form">
+      <input type="text" id="taskName" placeholder="Nombre de la tarea" required>
+      <select id="assignedTo" required>
+        <option value="">Asignar a...</option>
+        <option value="+525565414878">Angie</option>
+        <option value="+525634000661">Mar</option>
+        <option value="+525525690271">Minerva</option>
+        <option value="+522213282315">Jessica</option>
+        <option value="+584241408272">Nathaly</option>
+        <option value="+34676553121">Jose</option>
+      </select>
+      <input type="date" id="deadline">
+      <button onclick="addTask()">Agregar Tarea</button>
+    </div>
+
+    <!-- Lista de tareas -->
+    <div id="taskList"></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
