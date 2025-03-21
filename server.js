@@ -6,9 +6,9 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Configuración de Twilio
-const accountSid = 'AC23d870e91af9e3c0a1cced7478060880';
-const authToken = '5c05e2d9508998574b3f0a22cd66686c';
+// Configuración de Twilio usando variables de entorno
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = new twilio(accountSid, authToken);
 
 app.post('/send-sms', async (req, res) => {
@@ -17,7 +17,7 @@ app.post('/send-sms', async (req, res) => {
   try {
     await client.messages.create({
       body: message,
-      from: '+12084237177', // Número de Twilio
+      from: process.env.TWILIO_PHONE_NUMBER, // Número de Twilio desde variable de entorno
       to: to
     });
     res.status(200).send('SMS enviado');
