@@ -3,35 +3,143 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sistema de Tareas</title>
+  <title>Sistema de Tareas Profesional</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Sistema de Agendamiento de Tareas</h1>
-    
-    <!-- Formulario para agregar tarea -->
-    <div class="task-form">
-      <input type="text" id="taskName" placeholder="Nombre de la tarea" required>
-      <select id="assignedTo" required>
-        <option value="">Asignar a...</option>
-        <option value="+525565414878">Angie</option>
-        <option value="+525634000661">Mar</option>
-        <option value="+525525690271">Minerva</option>
-        <option value="+522213282315">Jessica</option>
-        <option value="+584241408272">Nathaly</option>
-        <option value="+34676553121">Jose</option>
-      </select>
-      <input type="date" id="deadline">
-      <button onclick="addTask()">Agregar Tarea</button>
+  <div class="layout">
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2><i class="fas fa-tasks"></i> Nueva Tarea</h2>
+        <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="task-form">
+        <input type="text" id="taskName" placeholder="Nombre de la tarea" required>
+        <select id="assignedTo">
+          <option value="">Asignar a...</option>
+          <option value="+525565414878">Angie</option>
+          <option value="+525634000661">Mar</option>
+          <option value="+525525690271">Minerva</option>
+          <option value="+522213282315">Jessica</option>
+          <option value="+584241408272">Nathaly</option>
+          <option value="+34676553121">Jose</option>
+        </select>
+        <input type="datetime-local" id="deadline" step="300">
+        <select id="urgency">
+          <option value="low">Baja</option>
+          <option value="medium" selected>Media</option>
+          <option value="high">Alta</option>
+        </select>
+        <input type="number" id="estimatedTime" placeholder="Tiempo estimado (horas)" min="0" step="0.5">
+        <select id="recurrence" onchange="toggleRecurrenceOptions()">
+          <option value="none">Sin recurrencia</option>
+          <option value="daily">Diaria</option>
+          <option value="weekly">Semanal</option>
+          <option value="monthly">Mensual</option>
+        </select>
+        <div id="recurrenceOptions" style="display: none;">
+          <label>Días de la semana (para semanal):</label>
+          <div>
+            <input type="checkbox" id="mon" name="recurrenceDays" value="1"> Lun
+            <input type="checkbox" id="tue" name="recurrenceDays" value="2"> Mar
+            <input type="checkbox" id="wed" name="recurrenceDays" value="3"> Mié
+            <input type="checkbox" id="thu" name="recurrenceDays" value="4"> Jue
+            <input type="checkbox" id="fri" name="recurrenceDays" value="5"> Vie
+            <input type="checkbox" id="sat" name="recurrenceDays" value="6"> Sáb
+            <input type="checkbox" id="sun" name="recurrenceDays" value="0"> Dom
+          </div>
+          <label>Fin de recurrencia:</label>
+          <input type="date" id="recurrenceEnd">
+          <label>Completar solo en día específico:</label>
+          <select id="completeOnDay">
+            <option value="">Ninguno</option>
+            <option value="1">Lunes</option>
+            <option value="2">Martes</option>
+            <option value="3">Miércoles</option>
+            <option value="4">Jueves</option>
+            <option value="5">Viernes</option>
+            <option value="6">Sábado</option>
+            <option value="0">Domingo</option>
+          </select>
+        </div>
+        <input type="text" id="dependsOn" placeholder="Depende de (ID tarea, opcional)">
+        <textarea id="notes" placeholder="Notas (opcional)"></textarea>
+        <button onclick="addTask()"><i class="fas fa-plus"></i> Agregar</button>
+      </div>
+    </div>
+    <button class="sidebar-open" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+
+    <!-- Main Content -->
+    <div class="main" id="mainContent">
+      <!-- Filtros -->
+      <div class="filters">
+        <button class="filter-btn" onclick="filterTasks('upcoming')">Próximas</button>
+        <button class="filter-btn" onclick="filterTasks('overdue')">Atrasadas</button>
+        <button class="filter-btn" onclick="filterTasks('noDeadline')">Sin Deadline</button>
+        <select class="filter-select" onchange="filterTasks(this.value)">
+          <option value="all">Todas las personas</option>
+          <option value="+525565414878">Angie</option>
+          <option value="+525634000661">Mar</option>
+          <option value="+525525690271">Minerva</option>
+          <option value="+522213282315">Jessica</option>
+          <option value="+584241408272">Nathaly</option>
+          <option value="+34676553121">Jose</option>
+        </select>
+        <button class="filter-btn" onclick="filterTasks('all')">Borrar Filtros</button>
+        <div class="view-toggle">
+          <button class="view-btn active" onclick="switchView('list')"><i class="fas fa-list"></i> Lista</button>
+          <button class="view-btn" onclick="switchView('kanban')"><i class="fas fa-columns"></i> Kanban</button>
+          <button class="view-btn" onclick="switchView('calendar')"><i class="fas fa-calendar"></i> Calendario</button>
+          <button class="view-btn" onclick="switchView('history')"><i class="fas fa-history"></i> Historial</button>
+          <button class="view-btn" onclick="switchView('workload')"><i class="fas fa-users"></i> Carga de Trabajo</button>
+          <button class="view-btn" onclick="switchView('reports')"><i class="fas fa-chart-pie"></i> Reportes</button>
+        </div>
+      </div>
+
+      <!-- Vista de tareas -->
+      <div id="taskView" class="list-view">
+        <div id="taskList"></div>
+        <div id="kanban" style="display: none;">
+          <div class="kanban-column" id="todo"><h3>Por Hacer</h3></div>
+          <div class="kanban-column" id="inProgress"><h3>En Progreso</h3></div>
+          <div class="kanban-column" id="done"><h3>Completadas</h3></div>
+        </div>
+        <div id="calendar" style="display: none;"></div>
+        <div id="history" style="display: none;"></div>
+        <div id="workload" style="display: none;"></div>
+        <div id="reports" style="display: none;">
+          <select id="reportFilter">
+            <option value="week">Semana actual</option>
+            <option value="custom">Días personalizados</option>
+            <option value="month">Mes completo</option>
+          </select>
+          <div id="customRange" style="display: none;">
+            <input type="date" id="startDate">
+            <input type="date" id="endDate">
+          </div>
+          <button onclick="downloadReport()">Descargar Reporte</button>
+          <div id="reportContent"></div>
+        </div>
+      </div>
     </div>
 
-    <!-- Lista de tareas -->
-    <div id="taskList"></div>
+    <!-- Popup -->
+    <div class="popup" id="taskPopup">
+      <div class="popup-content">
+        <span class="popup-close" onclick="closePopup()">×</span>
+        <div id="popupDetails"></div>
+      </div>
+    </div>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css">
   <script src="app.js"></script>
 </body>
 </html>
