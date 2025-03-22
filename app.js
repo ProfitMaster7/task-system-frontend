@@ -36,24 +36,23 @@ async function addTask() {
   const recurrenceDays = Array.from(document.querySelectorAll('input[name="recurrenceDays"]:checked')).map(input => parseInt(input.value));
   const recurrenceEnd = document.getElementById('recurrenceEnd').value;
   const completeOnDay = document.getElementById('completeOnDay').value;
-  const recurrenceDayOfMonth = document.getElementById('recurrenceDayOfMonth')?.value || null;
+  const recurrenceDayOfMonth = document.getElementById('recurrenceDayOfMonth').value;
   const dependsOn = document.getElementById('dependsOn').value.trim();
   const notes = document.getElementById('notes').value.trim();
 
   if (!taskName || !assignedTo) return alert("Faltan datos");
 
-  let createdAt = new Date().toISOString();
+  let createdAt = new Date();
   if (recurrence === 'weekly' && recurrenceDays.length > 0) {
-    const today = new Date().getDay();
+    const today = createdAt.getDay();
     const nextDay = recurrenceDays.sort().find(day => day > today) || recurrenceDays[0];
     const daysToAdd = nextDay > today ? nextDay - today : 7 - today + nextDay;
-    createdAt = new Date(new Date().setDate(new Date().getDate() + daysToAdd)).toISOString();
+    createdAt.setDate(createdAt.getDate() + daysToAdd);
   } else if (recurrence === 'monthly' && recurrenceDayOfMonth) {
-    const today = new Date();
     const dayOfMonth = parseInt(recurrenceDayOfMonth);
-    const nextDate = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
-    if (nextDate <= today) nextDate.setMonth(nextDate.getMonth() + 1);
-    createdAt = nextDate.toISOString();
+    const nextDate = new Date(createdAt.getFullYear(), createdAt.getMonth(), dayOfMonth);
+    if (nextDate <= createdAt) nextDate.setMonth(nextDate.getMonth() + 1);
+    createdAt = nextDate;
   }
 
   const task = {
@@ -73,7 +72,7 @@ async function addTask() {
     completedAt: null,
     status: 'todo',
     createdBy: 'Sistema',
-    createdAt,
+    createdAt: createdAt.toISOString(),
     lastEditedBy: null,
     lastEditedAt: null
   };
@@ -82,6 +81,7 @@ async function addTask() {
   tasksCache.set(docRef.id, task);
   toggleSidebar();
   clearForm();
+  renderTasks();
 }
 
 // Limpiar formulario
@@ -95,7 +95,7 @@ function clearForm() {
   document.querySelectorAll('input[name="recurrenceDays"]').forEach(input => input.checked = false);
   document.getElementById('recurrenceEnd').value = '';
   document.getElementById('completeOnDay').value = '';
-  document.getElementById('recurrenceDayOfMonth')?.value = '';
+  document.getElementById('recurrenceDayOfMonth').value = '';
   document.getElementById('dependsOn').value = '';
   document.getElementById('notes').value = '';
   document.getElementById('recurrenceOptions').style.display = 'none';
@@ -147,14 +147,7 @@ function renderTasks() {
   if (currentView === 'calendar') {
     const calendar = new FullCalendar.Calendar(calendarEl, {
       initialView: 'dayGridMonth',
-      events: Array.from(tasksCache.entries()).map(([taskId, task]) => ({
-        id: taskId,
-        title: task.taskName,
-        start: task.createdAt,
-        end: task.deadline || null,
-        backgroundColor: getColorByPerson(task.assignedTo),
-        extendedProps: { completed: task.completed }
-      })).filter(event => applyFilter(tasksCache.get(event.id)) && !event.extendedProps.completed),
+      events: generateRecurrentEvents(),
       eventClick: (info) => showTaskPopup(info.event.id)
     });
     calendar.render();
@@ -186,6 +179,79 @@ function renderTasks() {
   }
 
   updateTimers();
+}
+
+// Generar eventos recurrentes para el calendario
+function generateRecurrentEvents() {
+  const events = [];
+  tasksCache.forEach((task, taskId) => {
+    if (!applyFilter(task) || task.completed) return;
+
+    let startDate = new Date(task.createdAt);
+    const endDate = task.recurrenceEnd ? new Date(task.recurrenceEnd) : new Date('2100-12-31'); // Fecha lejana si no hay fin
+
+    switch (task.recurrence) {
+      case 'daily':
+        while (startDate <= endDate) {
+          events.push({
+            id: taskId,
+            title: task.taskName,
+            start: new Date(startDate),
+            end: task.deadline ? new Date(task.deadline) : null,
+            backgroundColor: getColorByPerson(task.assignedTo),
+            extendedProps: { completed: task.completed }
+          });
+          startDate.setDate(startDate.getDate() + 1);
+        }
+        break;
+      case 'weekly':
+        while (startDate <= endDate) {
+          task.recurrenceDays.forEach(day => {
+            const nextDate = new Date(startDate);
+            const daysToAdd = day >= startDate.getDay() ? day - startDate.getDay() : 7 - startDate.getDay() + day;
+            nextDate.setDate(nextDate.getDate() + daysToAdd);
+            if (nextDate <= endDate && nextDate >= new Date(task.createdAt)) {
+              events.push({
+                id: taskId,
+                title: task.taskName,
+                start: nextDate,
+                end: task.deadline ? new Date(task.deadline) : null,
+                backgroundColor: getColorByPerson(task.assignedTo),
+                extendedProps: { completed: task.completed }
+              });
+            }
+          });
+          startDate.setDate(startDate.getDate() + 7);
+        }
+        break;
+      case 'monthly':
+        while (startDate <= endDate) {
+          const nextDate = new Date(startDate.getFullYear(), startDate.getMonth(), task.recurrenceDayOfMonth || 1);
+          if (nextDate <= endDate && nextDate >= new Date(task.createdAt)) {
+            events.push({
+              id: taskId,
+              title: task.taskName,
+              start: nextDate,
+              end: task.deadline ? new Date(task.deadline) : null,
+              backgroundColor: getColorByPerson(task.assignedTo),
+              extendedProps: { completed: task.completed }
+            });
+          }
+          startDate.setMonth(startDate.getMonth() + 1);
+        }
+        break;
+      default:
+        events.push({
+          id: taskId,
+          title: task.taskName,
+          start: task.createdAt,
+          end: task.deadline || null,
+          backgroundColor: getColorByPerson(task.assignedTo),
+          extendedProps: { completed: task.completed }
+        });
+    }
+  });
+  return events;
 }
 
 // Crear elemento de tarea
@@ -225,40 +291,6 @@ function createTaskItem(taskId, task) {
     </div>
   `;
   return taskItem;
-}
-
-// Inicializar Sortable para Kanban
-function initSortable() {
-  ['todo', 'inProgress', 'done'].forEach(status => {
-    new Sortable(document.getElementById(status), {
-      group: 'kanban',
-      animation: 150,
-      onEnd: (evt) => {
-        const taskId = evt.item.dataset.id;
-        const newStatus = evt.to.id;
-        const updates = { 
-          status: newStatus, 
-          lastEditedAt: new Date().toISOString(), 
-          lastEditedBy: 'Sistema' 
-        };
-        if (newStatus === 'done') {
-          const task = tasksCache.get(taskId);
-          if (task.completeOnDay && !isValidCompleteDay(task.completeOnDay)) {
-            alert(`Esta tarea solo puede completarse el ${['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][task.completeOnDay]}`);
-            evt.item.remove();
-            renderTasks();
-            return;
-          }
-          updates.completed = true;
-          updates.completedAt = new Date().toISOString();
-        } else {
-          updates.completed = false;
-          updates.completedAt = null;
-        }
-        db.collection('tasks').doc(taskId).update(updates);
-      }
-    });
-  });
 }
 
 // Renderizar carga de trabajo
@@ -378,7 +410,7 @@ function getColorByPerson(phone) {
 // Calcular tiempo transcurrido
 function getTimeElapsed(createdAt) {
   const now = new Date();
-  const diff = Math.floor((now - createdAt) / (1000 * 60 * 60)); // Horas
+  const diff = Math.floor((now - createdAt) / (1000 * 60 * 60));
   const hours = diff;
   const minutes = Math.floor((now - createdAt) / (1000 * 60)) % 60;
   return `${hours}h ${minutes}m`;
@@ -488,51 +520,6 @@ function toggleRecurrenceOptions() {
   const recurrence = document.getElementById('recurrence').value;
   const options = document.getElementById('recurrenceOptions');
   options.style.display = recurrence === 'none' || recurrence === 'daily' ? 'none' : 'block';
-  if (recurrence === 'monthly') {
-    options.innerHTML = `
-      <label>Día del mes:</label>
-      <input type="number" id="recurrenceDayOfMonth" min="1" max="31" placeholder="Día del mes (1-31)">
-      <label>Fin de recurrencia:</label>
-      <input type="date" id="recurrenceEnd">
-      <label>Completar solo en día específico:</label>
-      <select id="completeOnDay">
-        <option value="">Ninguno</option>
-        <option value="1">Lunes</option>
-        <option value="2">Martes</option>
-        <option value="3">Miércoles</option>
-        <option value="4">Jueves</option>
-        <option value="5">Viernes</option>
-        <option value="6">Sábado</option>
-        <option value="0">Domingo</option>
-      </select>
-    `;
-  } else if (recurrence === 'weekly') {
-    options.innerHTML = `
-      <label>Días de la semana (para semanal):</label>
-      <div>
-        <input type="checkbox" id="mon" name="recurrenceDays" value="1"> Lun
-        <input type="checkbox" id="tue" name="recurrenceDays" value="2"> Mar
-        <input type="checkbox" id="wed" name="recurrenceDays" value="3"> Mié
-        <input type="checkbox" id="thu" name="recurrenceDays" value="4"> Jue
-        <input type="checkbox" id="fri" name="recurrenceDays" value="5"> Vie
-        <input type="checkbox" id="sat" name="recurrenceDays" value="6"> Sáb
-        <input type="checkbox" id="sun" name="recurrenceDays" value="0"> Dom
-      </div>
-      <label>Fin de recurrencia:</label>
-      <input type="date" id="recurrenceEnd">
-      <label>Completar solo en día específico:</label>
-      <select id="completeOnDay">
-        <option value="">Ninguno</option>
-        <option value="1">Lunes</option>
-        <option value="2">Martes</option>
-        <option value="3">Miércoles</option>
-        <option value="4">Jueves</option>
-        <option value="5">Viernes</option>
-        <option value="6">Sábado</option>
-        <option value="0">Domingo</option>
-      </select>
-    `;
-  }
 }
 
 // Marcar/desmarcar tarea
@@ -581,7 +568,7 @@ async function recreateTask(task, taskId) {
     }
     case 'monthly': {
       const today = new Date();
-      const dayOfMonth = task.recurrenceDayOfMonth || 1; // Día por defecto si no se especifica
+      const dayOfMonth = task.recurrenceDayOfMonth || 1;
       nextDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
       break;
     }
