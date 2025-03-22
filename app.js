@@ -13,8 +13,8 @@ const db = firebase.firestore();
 
 let currentFilter = 'all';
 let currentView = 'list';
-let tasksCache = new Map(); // Cache para gestionar tareas localmente
-let unsubscribe = null; // Para controlar el listener de Firebase
+let tasksCache = new Map();
+let unsubscribe = null;
 
 const personNames = {
   '+525565414878': 'Angie',
@@ -36,12 +36,26 @@ async function addTask() {
   const recurrenceDays = Array.from(document.querySelectorAll('input[name="recurrenceDays"]:checked')).map(input => parseInt(input.value));
   const recurrenceEnd = document.getElementById('recurrenceEnd').value;
   const completeOnDay = document.getElementById('completeOnDay').value;
+  const recurrenceDayOfMonth = document.getElementById('recurrenceDayOfMonth')?.value || null;
   const dependsOn = document.getElementById('dependsOn').value.trim();
   const notes = document.getElementById('notes').value.trim();
 
   if (!taskName || !assignedTo) return alert("Faltan datos");
 
-  const createdAt = new Date().toISOString();
+  let createdAt = new Date().toISOString();
+  if (recurrence === 'weekly' && recurrenceDays.length > 0) {
+    const today = new Date().getDay();
+    const nextDay = recurrenceDays.sort().find(day => day > today) || recurrenceDays[0];
+    const daysToAdd = nextDay > today ? nextDay - today : 7 - today + nextDay;
+    createdAt = new Date(new Date().setDate(new Date().getDate() + daysToAdd)).toISOString();
+  } else if (recurrence === 'monthly' && recurrenceDayOfMonth) {
+    const today = new Date();
+    const dayOfMonth = parseInt(recurrenceDayOfMonth);
+    const nextDate = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+    if (nextDate <= today) nextDate.setMonth(nextDate.getMonth() + 1);
+    createdAt = nextDate.toISOString();
+  }
+
   const task = {
     taskName,
     assignedTo,
@@ -49,14 +63,14 @@ async function addTask() {
     urgency,
     estimatedTime: estimatedTime ? parseFloat(estimatedTime) : null,
     recurrence,
-    recurrenceDays: recurrence === 'weekly' ? recurrenceDays : [], // Solo para semanal
+    recurrenceDays: recurrence === 'weekly' ? recurrenceDays : [],
     recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd).toISOString() : null,
-    completeOnDay: completeOnDay || null, // Día obligatorio para completar
+    completeOnDay: completeOnDay || null,
+    recurrenceDayOfMonth: recurrence === 'monthly' && recurrenceDayOfMonth ? parseInt(recurrenceDayOfMonth) : null,
     dependsOn: dependsOn || null,
     notes: notes || '',
     completed: false,
     completedAt: null,
-    actualTime: null,
     status: 'todo',
     createdBy: 'Sistema',
     createdAt,
@@ -65,7 +79,7 @@ async function addTask() {
   };
 
   const docRef = await db.collection('tasks').add(task);
-  tasksCache.set(docRef.id, task); // Actualizar cache inmediatamente
+  tasksCache.set(docRef.id, task);
   toggleSidebar();
   clearForm();
 }
@@ -81,6 +95,7 @@ function clearForm() {
   document.querySelectorAll('input[name="recurrenceDays"]').forEach(input => input.checked = false);
   document.getElementById('recurrenceEnd').value = '';
   document.getElementById('completeOnDay').value = '';
+  document.getElementById('recurrenceDayOfMonth')?.value = '';
   document.getElementById('dependsOn').value = '';
   document.getElementById('notes').value = '';
   document.getElementById('recurrenceOptions').style.display = 'none';
@@ -121,7 +136,6 @@ function renderTasks() {
   const workloadEl = document.getElementById('workload');
   const reportsEl = document.getElementById('reports');
 
-  // Limpiar vistas
   taskList.innerHTML = '';
   kanbanTodo.innerHTML = '<h3>Por Hacer</h3>';
   kanbanInProgress.innerHTML = '<h3>En Progreso</h3>';
@@ -130,7 +144,6 @@ function renderTasks() {
   workloadEl.innerHTML = '';
   reportsEl.innerHTML = '';
 
-  // Renderizar según la vista actual
   if (currentView === 'calendar') {
     const calendar = new FullCalendar.Calendar(calendarEl, {
       initialView: 'dayGridMonth',
@@ -172,7 +185,6 @@ function renderTasks() {
     });
   }
 
-  // Actualizar timers
   updateTimers();
 }
 
@@ -196,9 +208,8 @@ function createTaskItem(taskId, task) {
     ${task.deadline ? `<div>Deadline: ${new Date(task.deadline).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</div>` : ''}
     ${task.completed && task.completedAt ? `<div>Completada: ${new Date(task.completedAt).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</div>` : ''}
     ${task.estimatedTime ? `<div>Tiempo estimado: ${task.estimatedTime} horas</div>` : ''}
-    ${task.actualTime ? `<div>Tiempo real: ${task.actualTime} horas</div>` : ''}
     ${task.dependsOn ? `<div>Depende de: ${task.dependsOn}</div>` : ''}
-    ${task.recurrence !== 'none' ? `<div>Recurrencia: ${task.recurrence}${task.recurrenceDays.length ? ' (' + task.recurrenceDays.map(day => ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][day]).join(', ') + ')' : ''}</div>` : ''}
+    ${task.recurrence !== 'none' ? `<div>Recurrencia: ${task.recurrence}${task.recurrenceDays.length ? ' (' + task.recurrenceDays.map(day => ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][day]).join(', ') + ')' : task.recurrenceDayOfMonth ? ` (Día ${task.recurrenceDayOfMonth})` : ''}</div>` : ''}
     ${task.recurrenceEnd ? `<div>Fin de recurrencia: ${new Date(task.recurrenceEnd).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</div>` : ''}
     ${task.completeOnDay ? `<div>Completar solo el: ${['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][task.completeOnDay]}</div>` : ''}
     <div class="notes editable" onclick="editNotes('${taskId}', this)">${task.notes || 'Click para agregar notas'}</div>
@@ -240,12 +251,9 @@ function initSortable() {
           }
           updates.completed = true;
           updates.completedAt = new Date().toISOString();
-          const actualTime = prompt('Tiempo real empleado (horas):');
-          if (actualTime) updates.actualTime = parseFloat(actualTime);
         } else {
           updates.completed = false;
           updates.completedAt = null;
-          updates.actualTime = null;
         }
         db.collection('tasks').doc(taskId).update(updates);
       }
@@ -311,7 +319,7 @@ function downloadReport() {
   }
 
   let csvContent = "data:text/csv;charset=utf-8,";
-  csvContent += "Tarea,Asignada a,Completada en,Tiempo Estimado,Tiempo Real\n";
+  csvContent += "Tarea,Asignada a,Completada en,Tiempo Estimado\n";
 
   tasksCache.forEach((task) => {
     if (task.completed && task.completedAt) {
@@ -321,8 +329,7 @@ function downloadReport() {
           task.taskName,
           personNames[task.assignedTo] || task.assignedTo,
           completedAt.toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }),
-          task.estimatedTime || 'N/A',
-          task.actualTime || 'N/A'
+          task.estimatedTime || 'N/A'
         ].join(',');
         csvContent += row + "\n";
       }
@@ -379,7 +386,7 @@ function getTimeElapsed(createdAt) {
 
 // Validar día de completado
 function isValidCompleteDay(day) {
-  const today = new Date().getDay(); // 0 = Domingo, 1 = Lunes, etc.
+  const today = new Date().getDay();
   return parseInt(day) === today;
 }
 
@@ -395,12 +402,12 @@ function updateTimers() {
         span.textContent = `${task.taskName} (${timeElapsed}) - ${task.urgency}`;
       }
     });
-  }, 60000); // Actualizar cada minuto
+  }, 60000);
 }
 
 // Escuchar cambios en tiempo real
 function listenToChanges() {
-  if (unsubscribe) unsubscribe(); // Limpiar listener anterior
+  if (unsubscribe) unsubscribe();
   unsubscribe = db.collection('tasks').onSnapshot(snapshot => {
     snapshot.docChanges().forEach(change => {
       const taskId = change.doc.id;
@@ -479,7 +486,53 @@ function toggleSidebar() {
 // Toggle opciones de recurrencia
 function toggleRecurrenceOptions() {
   const recurrence = document.getElementById('recurrence').value;
-  document.getElementById('recurrenceOptions').style.display = recurrence === 'none' ? 'none' : 'block';
+  const options = document.getElementById('recurrenceOptions');
+  options.style.display = recurrence === 'none' || recurrence === 'daily' ? 'none' : 'block';
+  if (recurrence === 'monthly') {
+    options.innerHTML = `
+      <label>Día del mes:</label>
+      <input type="number" id="recurrenceDayOfMonth" min="1" max="31" placeholder="Día del mes (1-31)">
+      <label>Fin de recurrencia:</label>
+      <input type="date" id="recurrenceEnd">
+      <label>Completar solo en día específico:</label>
+      <select id="completeOnDay">
+        <option value="">Ninguno</option>
+        <option value="1">Lunes</option>
+        <option value="2">Martes</option>
+        <option value="3">Miércoles</option>
+        <option value="4">Jueves</option>
+        <option value="5">Viernes</option>
+        <option value="6">Sábado</option>
+        <option value="0">Domingo</option>
+      </select>
+    `;
+  } else if (recurrence === 'weekly') {
+    options.innerHTML = `
+      <label>Días de la semana (para semanal):</label>
+      <div>
+        <input type="checkbox" id="mon" name="recurrenceDays" value="1"> Lun
+        <input type="checkbox" id="tue" name="recurrenceDays" value="2"> Mar
+        <input type="checkbox" id="wed" name="recurrenceDays" value="3"> Mié
+        <input type="checkbox" id="thu" name="recurrenceDays" value="4"> Jue
+        <input type="checkbox" id="fri" name="recurrenceDays" value="5"> Vie
+        <input type="checkbox" id="sat" name="recurrenceDays" value="6"> Sáb
+        <input type="checkbox" id="sun" name="recurrenceDays" value="0"> Dom
+      </div>
+      <label>Fin de recurrencia:</label>
+      <input type="date" id="recurrenceEnd">
+      <label>Completar solo en día específico:</label>
+      <select id="completeOnDay">
+        <option value="">Ninguno</option>
+        <option value="1">Lunes</option>
+        <option value="2">Martes</option>
+        <option value="3">Miércoles</option>
+        <option value="4">Jueves</option>
+        <option value="5">Viernes</option>
+        <option value="6">Sábado</option>
+        <option value="0">Domingo</option>
+      </select>
+    `;
+  }
 }
 
 // Marcar/desmarcar tarea
@@ -498,12 +551,9 @@ async function toggleComplete(taskId, currentStatus) {
   if (!currentStatus) {
     updates.completedAt = new Date().toISOString();
     updates.status = 'done';
-    const actualTime = prompt('Tiempo real empleado (horas):');
-    if (actualTime) updates.actualTime = parseFloat(actualTime);
   } else {
     updates.completedAt = null;
     updates.status = 'todo';
-    updates.actualTime = null;
   }
   await db.collection('tasks').doc(taskId).update(updates);
 }
@@ -517,22 +567,24 @@ async function deleteTask(taskId) {
 async function recreateTask(task, taskId) {
   if (task.recurrence === 'none' || (task.recurrenceEnd && new Date(task.recurrenceEnd) < new Date())) return;
 
-  const now = new Date();
   let nextDate;
   switch (task.recurrence) {
     case 'daily':
-      nextDate = new Date(now.setDate(now.getDate() + 1));
+      nextDate = new Date(new Date().setDate(new Date().getDate() + 1));
       break;
     case 'weekly': {
-      const today = now.getDay();
-      const nextDay = task.recurrenceDays.find(day => day > today) || task.recurrenceDays[0];
-      const daysToAdd = (nextDay < today ? 7 - today + nextDay : nextDay - today);
-      nextDate = new Date(now.setDate(now.getDate() + daysToAdd));
+      const today = new Date().getDay();
+      const nextDay = task.recurrenceDays.sort().find(day => day > today) || task.recurrenceDays[0];
+      const daysToAdd = nextDay > today ? nextDay - today : 7 - today + nextDay;
+      nextDate = new Date(new Date().setDate(new Date().getDate() + daysToAdd));
       break;
     }
-    case 'monthly':
-      nextDate = new Date(now.setMonth(now.getMonth() + 1));
+    case 'monthly': {
+      const today = new Date();
+      const dayOfMonth = task.recurrenceDayOfMonth || 1; // Día por defecto si no se especifica
+      nextDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
       break;
+    }
     default:
       return;
   }
@@ -543,7 +595,6 @@ async function recreateTask(task, taskId) {
     deadline: task.deadline ? new Date(new Date(task.deadline).getTime() + (nextDate - new Date(task.createdAt))).toISOString() : null,
     completed: false,
     completedAt: null,
-    actualTime: null,
     status: 'todo',
     lastEditedBy: null,
     lastEditedAt: null
